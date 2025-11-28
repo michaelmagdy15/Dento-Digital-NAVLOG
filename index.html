@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dento Digital Navlog</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f4f4;
+        margin: 0;
+    }
+    h1 {
+        background: #1a3a6a;
+        color: white;
+        margin: 0;
+        padding: 12px 18px;
+    }
+    .container {
+        padding: 18px;
+    }
+    fieldset {
+        border: 1px solid #aaa;
+        margin-bottom: 10px;
+        background: #fff;
+    }
+    legend {
+        padding: 0 6px;
+        font-weight: bold;
+    }
+    .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 6px;
+    }
+    .field {
+        display: flex;
+        flex-direction: column;
+        font-size: 12px;
+    }
+    .field label {
+        margin-bottom: 2px;
+    }
+    .field input, .field textarea {
+        padding: 4px;
+        min-width: 90px;
+        border: 1px solid #ccc;
+        font-size: 12px;
+    }
+    textarea {
+        width: 100%;
+        min-height: 80px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        margin-top: 8px;
+    }
+    th, td {
+        border: 1px solid #aaa;
+        padding: 4px;
+        text-align: center;
+        font-size: 11px;
+    }
+    input[readonly] {
+        background: #eee;
+    }
+    button {
+        padding: 8px 12px;
+        margin: 4px 4px 8px 0;
+        border: none;
+        background: #1a3a6a;
+        color: white;
+        cursor: pointer;
+        border-radius: 3px;
+        font-size: 12px;
+    }
+    button:hover {
+        background: #254c8a;
+    }
+
+    /* waypoint field (dropdown + input) */
+    .wpField {
+        display: flex;
+        flex-direction: column;
+    }
+    .wpField select {
+        font-size: 11px;
+        padding: 2px;
+        margin-bottom: 2px;
+    }
+
+    /* ---------- PRINT OVERLAY (Excel layout) ---------- */
+
+    /* Hidden by default on screen */
+    #printSheetWrapper {
+        display: none;
+    }
+
+    /* Show overlay + hide editor in preview mode */
+    body.show-overlay #printSheetWrapper {
+        display: block;
+    }
+    body.show-overlay #editor,
+    body.show-overlay h1 {
+        display: none;
+    }
+
+    #printSheet {
+        position: relative;
+        width: 210mm;   /* A4 portrait */
+        height: 297mm;
+        background: url("navlog_excel_template.png") no-repeat center;
+        background-size: contain;
+    }
+    .fieldPrint {
+        position: absolute;
+        font-size: 7pt;
+        white-space: nowrap;
+    }
+
+    #overlayCloseBtn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        padding: 4px 8px;
+        background: rgba(0,0,0,0.65);
+        color: #fff;
+        border: none;
+        font-size: 11px;
+        cursor: pointer;
+        border-radius: 3px;
+        z-index: 10;
+    }
+
+    /* ---- Tuned positions ---- */
+    /* Top flight info */
+    #p_pilot     { top: 13.4%; left: 38%; width: 30%; }
+    #p_acreg     { top: 13.5%; left: 77%; width: 20%; }
+
+    #p_from      { top: 15.3%; left: 40%; width: 30%; }
+    #p_to        { top: 15.3%; left: 78%; width: 20%; }
+
+    #p_distance  { top: 18%;  left: 41%; width: 20%; }
+    #p_fltTime   { top: 18%;  left: 81%; width: 20%; }
+
+    #p_alt       { top: 20%;  left: 40%; width: 30%; }
+    #p_altDist   { top: 20%;  left: 82%; width: 20%; }
+
+    #p_brakesOff { top: 21.5%; left: 27%; width: 15%; }
+    #p_brakesOn  { top: 23%;  left: 27%; width: 15%; }
+
+    #p_tkofInfo  { top: 21.5%; left: 58%; width: 30%; }
+    #p_ldgInfo   { top: 22.78%;  left: 58%; width: 30%; }
+
+    /* MAIN ROW TOPS FOR OTHER COLUMNS (MSA / ALT / TAS / etc.) */
+    .r1 { top: 27%; }
+    .r2 { top: 32%; }
+    .r3 { top: 36%; }
+    .r4 { top: 40%; }
+    .r5 { top: 44%; }
+
+    .c-from { left: 7%;  width: 15%; }
+    .c-to   { left: 20%; width: 15%; } /* used only in the web table, not overlay now */
+    .c-msa  { left: 22%; width: 6%;  }
+    .c-alt  { left: 29%; width: 6%;  }
+    .c-tas  { left: 37%; width: 6%;  }
+    .c-tr   { left: 42%; width: 6%;  }
+    .c-wv   { left: 47%; width: 8%;  }
+    .c-hdgt { left: 54%; width: 6%;  }
+    .c-hdgm { left: 60%; width: 6%;  }
+    .c-gs   { left: 67%; width: 6%;  }
+    .c-dist { left: 73%; width: 6%;  }
+    .c-time { left: 79%; width: 6%;  }
+
+    /* FROM/TO COLUMN – separate line per row (you can fine-tune these tops) */
+    .r1_from { top: 25.5%;  }
+    .r1_to   { top: 28.4%;  }
+    .r2_from { top: 29.5%;  }
+    .r2_to   { top: 32%;  }
+    .r3_from { top: 33.5%;  }
+    .r3_to   { top: 36.2%;  }
+    .r4_from { top: 37.5%;  }
+    .r4_to   { top: 40%;  }
+    .r5_from { top: 41.6%;  }
+    .r5_to   { top: 44%;  }
+
+    /* Fuel + clearance */
+    #p_fob      { top: 52%; left: 25%; width: 15%; }
+    #p_fuelReq  { top: 53.5%; left: 25%; width: 15%; }
+    #p_clearance{ top: 47%; left: 35%; width: 55%; height: 18%; white-space: pre-wrap; }
+
+    /* PRINT MODE: always show overlay, hide editor/buttons */
+    @media print {
+        body { background: #fff; }
+        #editor, h1 { display: none !important; }
+        #printSheetWrapper { display: block !important; }
+        button { display: none !important; }
+    }
+</style>
+</head>
+<body>
+
+<h1>Dento Digital Navlog</h1>
+
+<!-- Everything inside #editor is your smart web form -->
+<div id="editor" class="container">
+
+<!-- Top Info -->
+<fieldset>
+<legend>Flight Info</legend>
+<div class="row">
+    <div class="field">
+        <label>Pilot</label>
+        <input id="pilot">
+    </div>
+    <div class="field">
+        <label>A/C Reg</label>
+        <input id="acreg">
+    </div>
+    <div class="field">
+        <label>From</label>
+        <input id="from">
+    </div>
+    <div class="field">
+        <label>To</label>
+        <input id="to">
+    </div>
+    <div class="field">
+        <label>Total Distance (NM)</label>
+        <input id="totalDist" readonly>
+    </div>
+    <div class="field">
+        <label>Planned Flight Time</label>
+        <input id="plannedTime" placeholder="hh:mm">
+    </div>
+</div>
+
+<div class="row">
+    <div class="field">
+        <label>Alternate</label>
+        <input id="alt">
+    </div>
+    <div class="field">
+        <label>Alt Distance (NM)</label>
+        <input id="altDist">
+    </div>
+    <div class="field">
+        <label>Dep Time (UTC / LT)</label>
+        <input id="depTime" value="08:00" placeholder="hh:mm">
+    </div>
+    <div class="field">
+        <label>Variation (E+ / W-)</label>
+        <input id="variation" value="4">
+    </div>
+    <div class="field">
+        <label>Fuel Burn (L/hr)</label>
+        <input id="fuelburn" value="10">
+    </div>
+</div>
+</fieldset>
+
+<!-- Brakes / RWY / Temp -->
+<fieldset>
+<legend>Brakes / Runway / Temperature</legend>
+<div class="row">
+    <div class="field">
+        <label>Brakes Off</label>
+        <input id="brakesOff" placeholder="hh:mm">
+    </div>
+    <div class="field">
+        <label>Brakes On</label>
+        <input id="brakesOn" placeholder="hh:mm">
+    </div>
+    <div class="field">
+        <label>Takeoff RWY / Wind / Temp</label>
+        <input id="tkofInfo" placeholder="e.g. 2000' 040/10 +20°C">
+    </div>
+    <div class="field">
+        <label>Landing RWY / Wind / Temp</label>
+        <input id="ldgInfo" placeholder="e.g. 5000' 220/12 +24°C">
+    </div>
+</div>
+</fieldset>
+
+<!-- Main Navlog Table -->
+<button onclick="addRow()">➕ Add Waypoint</button>
+<button onclick="calculateAll()">🧠 Auto-Calculate</button>
+<button onclick="saveJSON()">💾 Save</button>
+<button onclick="loadJSON()">📂 Load</button>
+<button onclick="previewOverlay()">👀 Preview layout</button>
+<button onclick="exportPDF()">📄 Print / PDF</button>
+
+<table id="navlog">
+<thead>
+<tr>
+    <th>FROM</th>
+    <th>TO</th>
+    <th>MSA</th>
+    <th>ALT</th>
+    <th>TAS</th>
+    <th>TR (T)</th>
+    <th>W/V (dir/spd)</th>
+    <th>WCA</th>
+    <th>HDG (T)</th>
+    <th>HDG (M)</th>
+    <th>G/S</th>
+    <th>Dist</th>
+    <th>Time</th>
+    <th>ETA</th>
+    <th>ATA</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<!-- Fuel + Stations + Clearance -->
+<div class="row" style="margin-top:10px;">
+    <div style="flex:1;">
+        <fieldset>
+            <legend>Fuel</legend>
+            <div class="field">
+                <label>FOB (start)</label>
+                <input id="fob">
+            </div>
+            <div class="field">
+                <label>Fuel Required (calc)</label>
+                <input id="fuelReq" readonly>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Stations</legend>
+            <table>
+                <thead>
+                    <tr><th>STATION</th><th>CRS</th><th>FREQ</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><input></td><td><input></td><td><input></td>
+                    </tr>
+                    <tr>
+                        <td><input></td><td><input></td><td><input></td>
+                    </tr>
+                    <tr>
+                        <td><input></td><td><input></td><td><input></td>
+                    </tr>
+                </tbody>
+            </table>
+        </fieldset>
+    </div>
+    <div style="flex:2%;">
+        <fieldset>
+            <legend>Clearance / Observations</legend>
+            <textarea id="clearance"></textarea>
+        </fieldset>
+    </div>
+</div>
+
+</div> <!-- end editor -->
+
+<!-- PRINT / PREVIEW OVERLAY -->
+<div id="printSheetWrapper">
+  <div id="printSheet">
+    <button id="overlayCloseBtn" type="button" onclick="closeOverlay()">Back</button>
+
+    <!-- top flight info -->
+    <div id="p_pilot" class="fieldPrint"></div>
+    <div id="p_acreg" class="fieldPrint"></div>
+    <div id="p_from" class="fieldPrint"></div>
+    <div id="p_to" class="fieldPrint"></div>
+    <div id="p_distance" class="fieldPrint"></div>
+    <div id="p_fltTime" class="fieldPrint"></div>
+    <div id="p_alt" class="fieldPrint"></div>
+    <div id="p_altDist" class="fieldPrint"></div>
+    <div id="p_brakesOff" class="fieldPrint"></div>
+    <div id="p_brakesOn" class="fieldPrint"></div>
+    <div id="p_tkofInfo" class="fieldPrint"></div>
+    <div id="p_ldgInfo" class="fieldPrint"></div>
+
+    <!-- FROM/TO column (two Excel rows per leg) -->
+    <div id="p_r1_from" class="fieldPrint r1_from c-from"></div>
+    <div id="p_r1_to"   class="fieldPrint r1_to   c-from"></div>
+
+    <div id="p_r2_from" class="fieldPrint r2_from c-from"></div>
+    <div id="p_r2_to"   class="fieldPrint r2_to   c-from"></div>
+
+    <div id="p_r3_from" class="fieldPrint r3_from c-from"></div>
+    <div id="p_r3_to"   class="fieldPrint r3_to   c-from"></div>
+
+    <div id="p_r4_from" class="fieldPrint r4_from c-from"></div>
+    <div id="p_r4_to"   class="fieldPrint r4_to   c-from"></div>
+
+    <div id="p_r5_from" class="fieldPrint r5_from c-from"></div>
+    <div id="p_r5_to"   class="fieldPrint r5_to   c-from"></div>
+
+    <!-- rest of nav fields, one row per leg -->
+    <div id="p_r1_msa"   class="fieldPrint r1 c-msa"></div>
+    <div id="p_r1_alt"   class="fieldPrint r1 c-alt"></div>
+    <div id="p_r1_tas"   class="fieldPrint r1 c-tas"></div>
+    <div id="p_r1_tr"    class="fieldPrint r1 c-tr"></div>
+    <div id="p_r1_wv"    class="fieldPrint r1 c-wv"></div>
+    <div id="p_r1_hdgt"  class="fieldPrint r1 c-hdgt"></div>
+    <div id="p_r1_hdgm"  class="fieldPrint r1 c-hdgm"></div>
+    <div id="p_r1_gs"    class="fieldPrint r1 c-gs"></div>
+    <div id="p_r1_dist"  class="fieldPrint r1 c-dist"></div>
+    <div id="p_r1_time"  class="fieldPrint r1 c-time"></div>
+
+    <div id="p_r2_msa"   class="fieldPrint r2 c-msa"></div>
+    <div id="p_r2_alt"   class="fieldPrint r2 c-alt"></div>
+    <div id="p_r2_tas"   class="fieldPrint r2 c-tas"></div>
+    <div id="p_r2_tr"    class="fieldPrint r2 c-tr"></div>
+    <div id="p_r2_wv"    class="fieldPrint r2 c-wv"></div>
+    <div id="p_r2_hdgt"  class="fieldPrint r2 c-hdgt"></div>
+    <div id="p_r2_hdgm"  class="fieldPrint r2 c-hdgm"></div>
+    <div id="p_r2_gs"    class="fieldPrint r2 c-gs"></div>
+    <div id="p_r2_dist"  class="fieldPrint r2 c-dist"></div>
+    <div id="p_r2_time"  class="fieldPrint r2 c-time"></div>
+
+    <div id="p_r3_msa"   class="fieldPrint r3 c-msa"></div>
+    <div id="p_r3_alt"   class="fieldPrint r3 c-alt"></div>
+    <div id="p_r3_tas"   class="fieldPrint r3 c-tas"></div>
+    <div id="p_r3_tr"    class="fieldPrint r3 c-tr"></div>
+    <div id="p_r3_wv"    class="fieldPrint r3 c-wv"></div>
+    <div id="p_r3_hdgt"  class="fieldPrint r3 c-hdgt"></div>
+    <div id="p_r3_hdgm"  class="fieldPrint r3 c-hdgm"></div>
+    <div id="p_r3_gs"    class="fieldPrint r3 c-gs"></div>
+    <div id="p_r3_dist"  class="fieldPrint r3 c-dist"></div>
+    <div id="p_r3_time"  class="fieldPrint r3 c-time"></div>
+
+    <div id="p_r4_msa"   class="fieldPrint r4 c-msa"></div>
+    <div id="p_r4_alt"   class="fieldPrint r4 c-alt"></div>
+    <div id="p_r4_tas"   class="fieldPrint r4 c-tas"></div>
+    <div id="p_r4_tr"    class="fieldPrint r4 c-tr"></div>
+    <div id="p_r4_wv"    class="fieldPrint r4 c-wv"></div>
+    <div id="p_r4_hdgt"  class="fieldPrint r4 c-hdgt"></div>
+    <div id="p_r4_hdgm"  class="fieldPrint r4 c-hdgm"></div>
+    <div id="p_r4_gs"    class="fieldPrint r4 c-gs"></div>
+    <div id="p_r4_dist"  class="fieldPrint r4 c-dist"></div>
+    <div id="p_r4_time"  class="fieldPrint r4 c-time"></div>
+
+    <div id="p_r5_msa"   class="fieldPrint r5 c-msa"></div>
+    <div id="p_r5_alt"   class="fieldPrint r5 c-alt"></div>
+    <div id="p_r5_tas"   class="fieldPrint r5 c-tas"></div>
+    <div id="p_r5_tr"    class="fieldPrint r5 c-tr"></div>
+    <div id="p_r5_wv"    class="fieldPrint r5 c-wv"></div>
+    <div id="p_r5_hdgt"  class="fieldPrint r5 c-hdgt"></div>
+    <div id="p_r5_hdgm"  class="fieldPrint r5 c-hdgm"></div>
+    <div id="p_r5_gs"    class="fieldPrint r5 c-gs"></div>
+    <div id="p_r5_dist"  class="fieldPrint r5 c-dist"></div>
+    <div id="p_r5_time"  class="fieldPrint r5 c-time"></div>
+
+    <!-- fuel & clearance -->
+    <div id="p_fob" class="fieldPrint"></div>
+    <div id="p_fuelReq" class="fieldPrint"></div>
+    <div id="p_clearance" class="fieldPrint"></div>
+  </div>
+</div>
+
+<script>
+/* ---------- helper to read / write cells (supports wpField) ---------- */
+function getCellValue(row, col) {
+    const cell = row.children[col];
+    if (!cell) return "";
+    let el = cell.querySelector("input, textarea");
+    if (el) return el.value || "";
+    el = cell.querySelector("select");
+    if (el) return el.value || "";
+    return "";
+}
+
+function setCellValue(row, col, value) {
+    const cell = row.children[col];
+    if (!cell) return;
+    let input = cell.querySelector("input, textarea");
+    if (input) input.value = value || "";
+    const sel = cell.querySelector("select");
+    if (sel) {
+        for (const opt of sel.options) {
+            if (opt.value === value || opt.text === value) {
+                sel.value = opt.value;
+                break;
+            }
+        }
+    }
+}
+
+// Add row
+function addRow() {
+    const rowHTML = `
+    <tr>
+        <td>
+            <div class="wpField">
+                <select onchange="this.nextElementSibling.value=this.value">
+                    <option value=""></option>
+                    <option value="LCLK">LCLK</option>
+                    <option value="LCPH">LCPH</option>
+                    <option value="LCSB">LCSB</option>
+                    <option value="VRP ORANGE GROVE">VRP ORANGE GROVE</option>
+                    <option value="VRP POWER STATION">VRP POWER STATION</option>
+                    <option value="VRP XYLOTYMBOU">VRP XYLOTYMBOU</option>
+                    <option value="VRP DHEKELIA">VRP DHEKELIA</option>
+                    <option value="SALT LAKE">SALT LAKE</option>
+                    <option value="SIA">SIA</option>
+                    <option value="MOSFILOTI">MOSFILOTI</option>
+                    <option value="KALOCHORIO">KALOCHORIO</option>
+                    <option value="ALAMPRA">ALAMPRA</option>
+                    <option value="MARKI">MARKI</option>
+                    <option value="PERA">PERA</option>
+                    <option value="DIPOTAMOS DAM">DIPOTAMOS DAM</option>
+                    <option value="KALAVASOS DAM">KALAVASOS DAM</option>
+                    <option value="GERMASOGEIA DAM">GERMASOGEIA DAM</option>
+                    <option value="KOURIS DAM">KOURIS DAM</option>
+                    <option value="PACHNA">PACHNA</option>
+                    <option value="TRACHYPEDOULA">TRACHYPEDOULA</option>
+                    <option value="ACHELIA">ACHELIA</option>
+                </select>
+                <input>
+            </div>
+        </td>
+        <td>
+            <div class="wpField">
+                <select onchange="this.nextElementSibling.value=this.value">
+                    <option value=""></option>
+                    <option value="LCLK">LCLK</option>
+                    <option value="LCPH">LCPH</option>
+                    <option value="LCSB">LCSB</option>
+                    <option value="VRP ORANGE GROVE">VRP ORANGE GROVE</option>
+                    <option value="VRP POWER STATION">VRP POWER STATION</option>
+                    <option value="VRP XYLOTYMBOU">VRP XYLOTYMBOU</option>
+                    <option value="VRP DHEKELIA">VRP DHEKELIA</option>
+                    <option value="SALT LAKE">SALT LAKE</option>
+                    <option value="SIA">SIA</option>
+                    <option value="MOSFILOTI">MOSFILOTI</option>
+                    <option value="KALOCHORIO">KALOCHORIO</option>
+                    <option value="ALAMPRA">ALAMPRA</option>
+                    <option value="MARKI">MARKI</option>
+                    <option value="PERA">PERA</option>
+                    <option value="DIPOTAMOS DAM">DIPOTAMOS DAM</option>
+                    <option value="KALAVASOS DAM">KALAVASOS DAM</option>
+                    <option value="GERMASOGEIA DAM">GERMASOGEIA DAM</option>
+                    <option value="KOURIS DAM">KOURIS DAM</option>
+                    <option value="PACHNA">PACHNA</option>
+                    <option value="TRACHYPEDOULA">TRACHYPEDOULA</option>
+                    <option value="ACHELIA">ACHELIA</option>
+                </select>
+                <input>
+            </div>
+        </td>
+        <td><input type="number" min="0"></td>
+        <td><input type="number" min="0"></td>
+        <td><input type="number" min="0" value="95"></td>
+        <td><input type="number" min="0" max="360"></td>
+        <td><input placeholder="ddd/ss"></td>
+        <td><input readonly></td>
+        <td><input readonly></td>
+        <td><input readonly></td>
+        <td><input readonly></td>
+        <td><input type="number" min="0"></td>
+        <td><input readonly></td>
+        <td><input readonly></td>
+        <td><input></td>
+    </tr>`;
+    document.querySelector("#navlog tbody").insertAdjacentHTML("beforeend", rowHTML);
+}
+
+function deg2rad(d){ return d * Math.PI / 180; }
+function rad2deg(r){ return r * 180 / Math.PI; }
+
+function calculateAll() {
+    const variation = parseFloat(document.getElementById("variation").value) || 0;
+    const fuelburn = parseFloat(document.getElementById("fuelburn").value) || 0;
+    const depTimeStr = document.getElementById("depTime").value || "08:00";
+
+    let rows = document.querySelectorAll("#navlog tbody tr");
+    let cumulativeMinutes = 0;
+    let totalDist = 0;
+    let totalTimeMin = 0;
+
+    rows.forEach(row => {
+        const TAS  = parseFloat(getCellValue(row, 4)) || 0;
+        const TR   = parseFloat(getCellValue(row, 5)) || 0;
+        const windStr = getCellValue(row, 6).trim();
+        const dist = parseFloat(getCellValue(row, 11)) || 0;
+
+        let wDir = 0, wSpd = 0;
+        if (windStr.includes("/")) {
+            const parts = windStr.split("/");
+            wDir = parseFloat(parts[0]) || 0;
+            wSpd = parseFloat(parts[1]) || 0;
+        }
+
+        let rel = deg2rad(wDir - TR);
+        let WCA = 0;
+        if (TAS > 0) {
+            let x = (wSpd / TAS) * Math.sin(rel);
+            if (x > 1) x = 1;
+            if (x < -1) x = -1;
+            WCA = rad2deg(Math.asin(x));
+        }
+        let HDG_T = TR + WCA;
+        let GS = TAS - wSpd * Math.cos(rel);
+        if (!isFinite(GS) || GS <= 0) GS = TAS;
+
+        let legMin = 0;
+        if (GS > 0 && dist > 0) {
+            legMin = dist / GS * 60;
+        }
+
+        cumulativeMinutes += legMin;
+        totalDist += dist;
+        totalTimeMin += legMin;
+
+        const eta = computeETA(depTimeStr, cumulativeMinutes);
+        let HDG_M = HDG_T - variation;
+
+        setCellValue(row, 7,  WCA.toFixed(1));
+        setCellValue(row, 8,  HDG_T.toFixed(0));
+        setCellValue(row, 9,  HDG_M.toFixed(0));
+        setCellValue(row,10, GS.toFixed(0));
+        setCellValue(row,12, legMin ? legMin.toFixed(0) + " min" : "");
+        setCellValue(row,13, eta);
+    });
+
+    document.getElementById("totalDist").value = totalDist.toFixed(1);
+
+    const hours = totalTimeMin / 60;
+    const fuelReq = hours * fuelburn;
+    document.getElementById("fuelReq").value = fuelReq ? fuelReq.toFixed(1) + " L" : "";
+}
+
+function computeETA(depTimeStr, addedMin) {
+    const [h,m] = depTimeStr.split(":").map(x => parseInt(x) || 0);
+    const base = new Date("2025-01-01T00:00:00");
+    base.setHours(h,m,0,0);
+    base.setMinutes(base.getMinutes() + addedMin);
+    const hh = String(base.getHours()).padStart(2,"0");
+    const mm = String(base.getMinutes()).padStart(2,"0");
+    return `${hh}:${mm}`;
+}
+
+function saveJSON() {
+    const data = {
+        top: {
+            pilot: document.getElementById("pilot").value,
+            acreg: document.getElementById("acreg").value,
+            from: document.getElementById("from").value,
+            to: document.getElementById("to").value,
+            plannedTime: document.getElementById("plannedTime").value,
+            alt: document.getElementById("alt").value,
+            altDist: document.getElementById("altDist").value,
+            depTime: document.getElementById("depTime").value,
+            variation: document.getElementById("variation").value,
+            fuelburn: document.getElementById("fuelburn").value,
+            brakesOff: document.getElementById("brakesOff").value,
+            brakesOn: document.getElementById("brakesOn").value,
+            tkofInfo: document.getElementById("tkofInfo").value,
+            ldgInfo: document.getElementById("ldgInfo").value,
+            fob: document.getElementById("fob").value,
+            clearance: document.getElementById("clearance").value
+        },
+        rows: [],
+        stations: []
+    };
+
+    document.querySelectorAll("#navlog tbody tr").forEach(r => {
+        const rowData = [];
+        for (let i = 0; i < r.children.length; i++) {
+            rowData.push(getCellValue(r, i));
+        }
+        data.rows.push(rowData);
+    });
+
+    document.querySelectorAll("fieldset legend + table tbody tr").forEach(r => {
+        data.stations.push(Array.from(r.children).map(c => {
+            const inp = c.querySelector("input");
+            return inp ? inp.value : "";
+        }));
+    });
+
+    const blob = new Blob([JSON.stringify(data)], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "navlog_dento.json";
+    a.click();
+}
+
+function loadJSON() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = e => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = () => {
+            const data = JSON.parse(reader.result);
+            const t = data.top || {};
+            document.getElementById("pilot").value = t.pilot || "";
+            document.getElementById("acreg").value = t.acreg || "";
+            document.getElementById("from").value = t.from || "";
+            document.getElementById("to").value = t.to || "";
+            document.getElementById("plannedTime").value = t.plannedTime || "";
+            document.getElementById("alt").value = t.alt || "";
+            document.getElementById("altDist").value = t.altDist || "";
+            document.getElementById("depTime").value = t.depTime || "";
+            document.getElementById("variation").value = t.variation || "";
+            document.getElementById("fuelburn").value = t.fuelburn || "";
+            document.getElementById("brakesOff").value = t.brakesOff || "";
+            document.getElementById("brakesOn").value = t.brakesOn || "";
+            document.getElementById("tkofInfo").value = t.tkofInfo || "";
+            document.getElementById("ldgInfo").value = t.ldgInfo || "";
+            document.getElementById("fob").value = t.fob || "";
+            document.getElementById("clearance").value = t.clearance || "";
+
+            const tbody = document.querySelector("#navlog tbody");
+            tbody.innerHTML = "";
+            (data.rows || []).forEach(rowArr => {
+                addRow();
+                const last = tbody.querySelector("tr:last-child");
+                rowArr.forEach((val, i) => {
+                    setCellValue(last, i, val);
+                });
+            });
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+/* -------- overlay helpers -------- */
+
+function fillOverlayFromForm() {
+    // top info
+    document.getElementById("p_pilot").textContent    = document.getElementById("pilot").value;
+    document.getElementById("p_acreg").textContent    = document.getElementById("acreg").value;
+    document.getElementById("p_from").textContent     = document.getElementById("from").value;
+    document.getElementById("p_to").textContent       = document.getElementById("to").value;
+    document.getElementById("p_distance").textContent = document.getElementById("totalDist").value;
+    document.getElementById("p_fltTime").textContent  = document.getElementById("plannedTime").value;
+    document.getElementById("p_alt").textContent      = document.getElementById("alt").value;
+    document.getElementById("p_altDist").textContent  = document.getElementById("altDist").value;
+    document.getElementById("p_brakesOff").textContent= document.getElementById("brakesOff").value;
+    document.getElementById("p_brakesOn").textContent = document.getElementById("brakesOn").value;
+    document.getElementById("p_tkofInfo").textContent = document.getElementById("tkofInfo").value;
+    document.getElementById("p_ldgInfo").textContent  = document.getElementById("ldgInfo").value;
+    document.getElementById("p_fob").textContent      = document.getElementById("fob").value;
+    document.getElementById("p_fuelReq").textContent  = document.getElementById("fuelReq").value;
+    document.getElementById("p_clearance").textContent= document.getElementById("clearance").value;
+
+    const rows = document.querySelectorAll("#navlog tbody tr");
+    const maxLegs = 5;
+
+    for (let i = 0; i < maxLegs; i++) {
+        const r = rows[i];
+        const idx = i + 1;
+
+        const fromDiv = document.getElementById(`p_r${idx}_from`);
+        const toDiv   = document.getElementById(`p_r${idx}_to`);
+        const msaDiv  = document.getElementById(`p_r${idx}_msa`);
+        const altDiv  = document.getElementById(`p_r${idx}_alt`);
+        const tasDiv  = document.getElementById(`p_r${idx}_tas`);
+        const trDiv   = document.getElementById(`p_r${idx}_tr`);
+        const wvDiv   = document.getElementById(`p_r${idx}_wv`);
+        const hdgtDiv = document.getElementById(`p_r${idx}_hdgt`);
+        const hdgmDiv = document.getElementById(`p_r${idx}_hdgm`);
+        const gsDiv   = document.getElementById(`p_r${idx}_gs`);
+        const distDiv = document.getElementById(`p_r${idx}_dist`);
+        const timeDiv = document.getElementById(`p_r${idx}_time`);
+
+        if (!r) {
+            if (fromDiv) fromDiv.textContent = "";
+            if (toDiv)   toDiv.textContent   = "";
+            if (msaDiv)  msaDiv.textContent  = "";
+            if (altDiv)  altDiv.textContent  = "";
+            if (tasDiv)  tasDiv.textContent  = "";
+            if (trDiv)   trDiv.textContent   = "";
+            if (wvDiv)   wvDiv.textContent   = "";
+            if (hdgtDiv) hdgtDiv.textContent = "";
+            if (hdgmDiv) hdgmDiv.textContent = "";
+            if (gsDiv)   gsDiv.textContent   = "";
+            if (distDiv) distDiv.textContent = "";
+            if (timeDiv) timeDiv.textContent = "";
+            continue;
+        }
+
+        const from  = getCellValue(r, 0);
+        const to    = getCellValue(r, 1);
+        const msa   = getCellValue(r, 2);
+        const alt   = getCellValue(r, 3);
+        const tas   = getCellValue(r, 4);
+        const tr    = getCellValue(r, 5);
+        const wv    = getCellValue(r, 6);
+        const hdgt  = getCellValue(r, 8);
+        const hdgm  = getCellValue(r, 9);
+        const gs    = getCellValue(r,10);
+        const dist  = getCellValue(r,11);
+        const time  = getCellValue(r,12);
+
+        if (fromDiv) fromDiv.textContent = from;
+        if (toDiv)   toDiv.textContent   = to;
+
+        if (msaDiv)  msaDiv.textContent  = msa;
+        if (altDiv)  altDiv.textContent  = alt;
+        if (tasDiv)  tasDiv.textContent  = tas;
+        if (trDiv)   trDiv.textContent   = tr;
+        if (wvDiv)   wvDiv.textContent   = wv;
+        if (hdgtDiv) hdgtDiv.textContent = hdgt;
+        if (hdgmDiv) hdgmDiv.textContent = hdgm;
+        if (gsDiv)   gsDiv.textContent   = gs;
+        if (distDiv) distDiv.textContent = dist;
+        if (timeDiv) timeDiv.textContent = time;
+    }
+}
+
+function previewOverlay() {
+    fillOverlayFromForm();
+    document.body.classList.add("show-overlay");
+}
+
+function closeOverlay() {
+    document.body.classList.remove("show-overlay");
+}
+
+function exportPDF(){
+    fillOverlayFromForm();
+    window.print();
+}
+
+// init
+addRow();
+addRow();
+</script>
+</body>
+</html>
