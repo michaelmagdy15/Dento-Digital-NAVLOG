@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Dento Digital NAVLOG</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
 <style>
     /* --- SCREEN / EDITOR STYLES --- */
     body {
@@ -370,7 +372,7 @@
     .fuel-calc-table input { width: 100%; border: none; background: transparent; font-family: monospace; text-align: right; font-weight: bold; color: #334155; }
     .fuel-total-row { background: #f1f5f9; font-weight: bold; color: #1e293b; }
 
-    /* --- CUSTOM PRINT CSS FIXED --- */
+    /* --- CUSTOM PRINT CSS FIXED FOR KNEEBOARD (SIDE BY SIDE) --- */
     #printSheetWrapper { 
         display: none; 
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -390,18 +392,44 @@
         font-weight: bold; border: 1px solid #475569; cursor: pointer;
     }
 
-    /* DENTO PRINT PAGE */
-    .dento-page { 
+    /* PRINT SHEET CONTAINER (A4 Landscape) */
+    .print-sheet {
+        width: 297mm; /* A4 Landscape Width */
+        height: 210mm; /* A4 Landscape Height */
+        background: white;
+        display: flex;
+        overflow: hidden;
+        page-break-after: always;
+        margin-bottom: 20px;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    }
+
+    /* HALF PAGE SLOT (A5) */
+    .half-sheet {
+        width: 50%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center; /* VERTICALLY CENTER CONTENT */
+        border-right: 1px dashed #ccc; /* Cut Line */
+        position: relative;
+        overflow: hidden;
+    }
+    .half-sheet:last-child { border-right: none; }
+
+    /* DENTO PRINT PAGE (Scaled Down to fit A5) */
+    .dento-page-scaled { 
         width: 210mm; 
         height: 296mm; 
         background: white; 
         padding: 10mm; 
         box-sizing: border-box; 
-        margin-bottom: 20px;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.5);
         display: flex; flex-direction: column;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
+        /* SCALING MAGIC */
+        transform: scale(0.62); /* REDUCED SCALE TO 0.62 TO ENSURE FOOTER FITS */
+        transform-origin: center center; /* CENTER SCALING */
     }
 
     /* Grid Lines */
@@ -524,11 +552,11 @@
     }
 
     @media print {
-        @page { size: A4 portrait; margin: 0; }
+        @page { size: A4 landscape; margin: 0; }
         body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; overflow: visible; }
         #editor, h1, h5, #fetchMetarBtn, button { display: none !important; }
         #printSheetWrapper { display: block !important; position: static; background: white; overflow: visible; padding: 0; }
-        .dento-page { box-shadow: none; margin: 0; width: 100%; height: 100%; page-break-after: always; }
+        .print-sheet { box-shadow: none; margin: 0; width: 100%; height: 100%; page-break-after: always; }
         #overlayCloseBtn { display: none; }
     }
 
@@ -764,6 +792,7 @@
 <button onclick="manualLoad()">📂 Upload Data</button>
 <button onclick="previewOverlay()">👀 Preview layout</button>
 <button onclick="exportPDF()">📄 Print / PDF</button>
+<button onclick="saveAsImage()" style="background: linear-gradient(to bottom, #8b5cf6, #7c3aed); box-shadow: 0 2px 4px rgba(139, 92, 246, 0.2);">💾 Save Image (PNG)</button>
 
 <div class="table-wrapper">
 <table id="navlog">
@@ -1438,53 +1467,10 @@ function calculateRunwayComponents(type) {
         outDiv.textContent = text; outDiv.className = isDanger ? "calc-readout danger" : "calc-readout";
     } else { outDiv.textContent = ""; }
 }
-function generatePrintLayout() {
-    try {
-        const container = document.getElementById("printPagesContainer"); 
-        if(!container) return;
-        container.innerHTML = "";
-        const rows = Array.from(document.querySelectorAll("#navlog tbody tr"));
-        const legsPerPage = 5; const pageCount = Math.ceil(Math.max(rows.length, 1) / legsPerPage);
-        
-        const safeVal = (id) => document.getElementById(id) ? document.getElementById(id).value : "";
-        const safeText = (id) => document.getElementById(id) ? document.getElementById(id).textContent : "";
 
-        const d = {
-            pilot: safeVal("pilot"), reg: safeVal("acreg"), from: safeVal("from"), to: safeVal("to"), 
-            dist: safeVal("totalDist"), time: safeVal("plannedTime"), alt: safeVal("alt"), 
-            altDist: safeVal("altDist"), bkOff: safeVal("brakesOff"), bkOn: safeVal("brakesOn"), 
-            tkof: safeVal("tkofInfo"), ldg: safeVal("ldgInfo"), fob: safeVal("fob"), 
-            fuelReq: safeVal("fuel_min"), clearance: safeVal("clearance")
-        };
-        const mb = { cg: safeText('mb_res_cg'), wt: safeText('mb_res_weight') };
-        
-        const stationRows = document.querySelectorAll("#stationsTable tbody tr");
-        const stations = Array.from(stationRows).map(r => ({ 
-            st: r.children[0].querySelector("input")?.value || "", 
-            crs: r.children[1].querySelector("input")?.value || "", 
-            frq: r.children[2].querySelector("input")?.value || "" 
-        }));
-
-        for (let p = 0; p < pageCount; p++) {
-            const startIdx = p * legsPerPage; const pageRows = rows.slice(startIdx, startIdx + legsPerPage);
-            const pageHtml = `
-            <div class="dento-page"><div class="dento-form"><div class="header-top"><div class="header-left"><div class="p-col gray" style="height:25px; border-bottom:var(--pt-border)">TRANSPONDER</div><div class="xpdr-row"><div class="xpdr-label">Distress</div><div class="xpdr-val">7700</div></div><div class="xpdr-row"><div class="xpdr-label">Com Fail</div><div class="xpdr-val">7500</div></div><div class="xpdr-row"><div class="xpdr-label">Conspicuity</div><div class="xpdr-val">7000</div></div></div><div class="header-right"><div class="fd-row"><div class="fd-cell" style="width:70%"><span class="p-label">Pilot:</span> <span class="p-value">${d.pilot}</span></div><div class="fd-cell" style="width:30%"><span class="p-label">A/C Reg:</span> <span class="p-value">${d.reg}</span></div></div><div class="fd-row"><div class="fd-cell"><span class="p-label">From:</span> <span class="p-value">${d.from}</span></div><div class="fd-cell"><span class="p-label">To:</span> <span class="p-value">${d.to}</span></div></div><div class="fd-row"><div class="fd-cell"><span class="p-label">Distance:</span> <span class="p-value">${d.dist}</span></div><div class="fd-cell"><span class="p-label">Flight Time:</span> <span class="p-value">${d.time}</span></div></div><div class="fd-row"><div class="fd-cell"><span class="p-label">Alternative:</span> <span class="p-value">${d.alt}</span></div><div class="fd-cell"><span class="p-label">Distance:</span> <span class="p-value">${d.altDist}</span></div></div><div class="rw-row"><div class="rw-cell" style="width:25%"><span class="p-label">Brakes Off:</span> <span class="p-value">${d.bkOff}</span></div><div class="rw-cell" style="width:35%"><span class="p-label">Takeoff:</span></div><div class="rw-cell" style="flex:1"><span class="p-value">${d.tkof}</span></div></div><div class="rw-row" style="border-bottom:none;"><div class="rw-cell" style="width:25%"><span class="p-label">Brakes On:</span> <span class="p-value">${d.bkOn}</span></div><div class="rw-cell" style="width:35%"><span class="p-label">Landing:</span></div><div class="rw-cell" style="flex:1"><span class="p-value">${d.ldg}</span></div></div></div></div><table class="navlog-print-table"><thead><tr><th class="col-fromto">FROM / TO</th><th class="col-msa">MSA</th><th class="col-alt">ALT</th><th class="col-tas">TAS</th><th class="col-tr">TR<br>(T)</th><th class="col-wv">W/V</th><th class="col-hdg">HDG<br>(T)</th><th class="col-hdg">HDG<br>(M)</th><th class="col-gs">G/S</th><th class="col-dist">Dist</th><th class="col-time">Time</th><th class="col-eta">ETA</th><th class="col-eta">ATA</th></tr></thead><tbody>${generatePrintRows(pageRows, 5)}</tbody></table><div class="footer-section"><div class="footer-left"><div class="distress-bar">"Distress 121.50"</div><table class="stations-table"><tr><th>STATION</th><th>CRS</th><th>FREQ</th></tr><tr><td>${stations[0]?.st||''}</td><td>${stations[0]?.crs||''}</td><td>${stations[0]?.frq||''}</td></tr><tr><td>${stations[1]?.st||''}</td><td>${stations[1]?.crs||''}</td><td>${stations[1]?.frq||''}</td></tr><tr><td>${stations[2]?.st||''}</td><td>${stations[2]?.crs||''}</td><td>${stations[2]?.frq||''}</td></tr></table><div class="fuel-header">FUEL & M/B</div><div class="fuel-row"><div class="fuel-lbl">FOB</div><div class="fuel-val">${d.fob}</div></div><div class="fuel-row"><div class="fuel-lbl">Fuel Req</div><div class="fuel-val">${d.fuelReq}</div></div><div class="mb-print-box"><span>CG: <b>${mb.cg}</b></span><span>GW: <b>${mb.wt}</b></span></div></div><div class="footer-mid"><div class="clearance-header">Clearance / Observations</div><div class="clearance-box">${d.clearance}</div></div><div class="footer-right"><div class="vertical-text">DENTO AVIATION</div></div></div></div></div>`;
-            container.innerHTML += pageHtml;
-        }
-    } catch(e) { console.error("Print Gen Error", e); alert("Error generating print preview. See console."); }
-}
-function generatePrintRows(rows, targetCount) {
-    let html = "";
-    rows.forEach(row => { html += `<tr><td class="split-cell"><div class="split-top">${getCellValue(row, 0)}</div><div class="split-bottom">${getCellValue(row, 1)}</div></td><td>${getCellValue(row, 2)}</td><td>${getCellValue(row, 3)}</td><td>${getCellValue(row, 4)}</td><td>${getCellValue(row, 5)}</td><td>${getCellValue(row, 6)}</td><td>${getCellValue(row, 8)}</td><td>${getCellValue(row, 9)}</td><td>${getCellValue(row, 10)}</td><td>${getCellValue(row, 11)}</td><td>${getCellValue(row, 12)}</td><td>${getCellValue(row, 13)}</td><td>${getCellValue(row, 14)}</td></tr>`; });
-    for(let i = rows.length; i < targetCount; i++) { html += `<tr><td class="split-cell"><div class="split-top"></div><div class="split-bottom"></div></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`; }
-    return html;
-}
-
-
-/* --- LEAFLET MAP INTEGRATION --- */
+/* --- MAP FUNCTIONS --- */
 let mapInstance = null;
-let routePolyline = null;
-let mapMarkers = [];
+let mapLayers = [];
 
 function openMap() {
     const modal = document.getElementById('mapModal');
@@ -1492,65 +1478,196 @@ function openMap() {
     
     if (!mapInstance) {
         // Init map centered on Cyprus
-        mapInstance = L.map('map').setView([34.9, 33.3], 9);
+        mapInstance = L.map('map').setView([35.00, 33.30], 9);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
         }).addTo(mapInstance);
-        
-        // Add markers for all known waypoints
-        WAYPOINTS.forEach(wp => {
-            const coords = getLatLon(wp);
-            if (coords) {
-                L.marker([coords.lat, coords.lon])
-                 .bindPopup(`<b>${wp}</b>`)
-                 .addTo(mapInstance);
-            }
-        });
     }
-    
-    // Draw Route based on table
-    updateRouteOnMap();
-    
-    // Fix layout issue when map hidden
-    setTimeout(() => { mapInstance.invalidateSize(); }, 200);
+    setTimeout(() => {
+        mapInstance.invalidateSize();
+        plotRouteOnMap(); 
+    }, 200);
 }
 
 function closeMap() {
     document.getElementById('mapModal').style.display = 'none';
 }
 
-function updateRouteOnMap() {
-    if (!mapInstance) return;
-    
-    // Clear old line
-    if (routePolyline) { mapInstance.removeLayer(routePolyline); }
-    
+function plotRouteOnMap() {
+    mapLayers.forEach(l => mapInstance.removeLayer(l));
+    mapLayers = [];
+    const routeCoords = [];
     const rows = document.querySelectorAll("#navlog tbody tr");
-    const latlngs = [];
-    
-    // Build path from From/To columns
-    let lastTo = null;
-    
-    rows.forEach(row => {
-        const from = getCellValue(row, 0);
-        const to = getCellValue(row, 1);
-        
-        if (from && WAYPOINT_DATA[from]) {
-            const c = getLatLon(from);
-            // Avoid duplicates if previous To is same as current From
-            if (from !== lastTo) latlngs.push([c.lat, c.lon]); 
+    const plottedMarkers = new Set(); 
+    const addMarker = (coords, label) => {
+        const key = label.toUpperCase(); 
+        if (plottedMarkers.has(key)) return;
+        const m = L.marker([coords.lat, coords.lon]).bindPopup(`<b>${label}</b>`).addTo(mapInstance);
+        mapLayers.push(m);
+        plottedMarkers.add(key);
+    };
+    rows.forEach((row, index) => {
+        const fromVal = getCellValue(row, 0); 
+        const toVal = getCellValue(row, 1);   
+        if (fromVal) {
+            const c1 = getLatLon(fromVal);
+            if (c1) { addMarker(c1, fromVal); routeCoords.push([c1.lat, c1.lon]); }
         }
-        if (to && WAYPOINT_DATA[to]) {
-            const c = getLatLon(to);
-            latlngs.push([c.lat, c.lon]);
-            lastTo = to;
+        if (index === rows.length - 1 && toVal) {
+            const c2 = getLatLon(toVal);
+            if (c2) { addMarker(c2, toVal); routeCoords.push([c2.lat, c2.lon]); }
         }
     });
-    
-    if (latlngs.length > 1) {
-        routePolyline = L.polyline(latlngs, {color: 'blue', weight: 4}).addTo(mapInstance);
-        mapInstance.fitBounds(routePolyline.getBounds(), {padding: [50,50]});
+    if (routeCoords.length > 1) {
+        const polyline = L.polyline(routeCoords, {color: 'blue', weight: 4, opacity: 0.7}).addTo(mapInstance);
+        mapLayers.push(polyline);
+        mapInstance.fitBounds(polyline.getBounds(), {padding: [50, 50]});
     }
+}
+
+/* --- PRINT LAYOUT LOGIC (SIDE BY SIDE A5) --- */
+function getHtmlForPage(rows, pageIndex, totalDist) {
+    const legsPerPage = 5;
+    const startIdx = pageIndex * legsPerPage;
+    const pageRows = rows.slice(startIdx, startIdx + legsPerPage);
+    
+    // Safety Getters
+    const safeVal = (id) => document.getElementById(id) ? document.getElementById(id).value : "";
+    const safeText = (id) => document.getElementById(id) ? document.getElementById(id).textContent : "";
+
+    const d = {
+        pilot: safeVal("pilot"), reg: safeVal("acreg"), from: safeVal("from"), to: safeVal("to"), 
+        dist: totalDist, time: safeVal("plannedTime"), alt: safeVal("alt"), 
+        altDist: safeVal("altDist"), bkOff: safeVal("brakesOff"), bkOn: safeVal("brakesOn"), 
+        tkof: safeVal("tkofInfo"), ldg: safeVal("ldgInfo"), fob: safeVal("fob"), 
+        fuelReq: safeVal("fuel_min"), clearance: safeVal("clearance")
+    };
+    const mb = { cg: safeText('mb_res_cg'), wt: safeText('mb_res_weight') };
+    
+    const stationRows = document.querySelectorAll("#stationsTable tbody tr");
+    const stations = Array.from(stationRows).map(r => ({ 
+        st: r.children[0].querySelector("input")?.value || "", 
+        crs: r.children[1].querySelector("input")?.value || "", 
+        frq: r.children[2].querySelector("input")?.value || "" 
+    }));
+
+    return `
+    <div class="dento-page-scaled">
+        <div class="dento-form">
+            <div class="header-top">
+                <div class="header-left">
+                    <div class="p-col gray" style="height:25px; border-bottom:1px solid black; font-weight:bold; font-size:10px; padding:2px;">TRANSPONDER</div>
+                    <div class="xpdr-row"><div class="xpdr-label">Distress</div><div class="xpdr-val">7700</div></div>
+                    <div class="xpdr-row"><div class="xpdr-label">Com Fail</div><div class="xpdr-val">7500</div></div>
+                    <div class="xpdr-row"><div class="xpdr-label">Conspicuity</div><div class="xpdr-val">7000</div></div>
+                </div>
+                <div class="header-right">
+                    <div class="fd-row"><div class="fd-cell" style="width:70%"><span class="p-label">Pilot:</span> <span class="p-value">${d.pilot}</span></div><div class="fd-cell" style="width:30%"><span class="p-label">A/C Reg:</span> <span class="p-value">${d.reg}</span></div></div>
+                    <div class="fd-row"><div class="fd-cell"><span class="p-label">From:</span> <span class="p-value">${d.from}</span></div><div class="fd-cell"><span class="p-label">To:</span> <span class="p-value">${d.to}</span></div></div>
+                    <div class="fd-row"><div class="fd-cell"><span class="p-label">Distance:</span> <span class="p-value">${d.dist}</span></div><div class="fd-cell"><span class="p-label">Flight Time:</span> <span class="p-value">${d.time}</span></div></div>
+                    <div class="fd-row"><div class="fd-cell"><span class="p-label">Alternative:</span> <span class="p-value">${d.alt}</span></div><div class="fd-cell"><span class="p-label">Distance:</span> <span class="p-value">${d.altDist}</span></div></div>
+                    <div class="rw-row"><div class="rw-cell" style="width:25%"><span class="p-label">Brakes Off:</span> <span class="p-value">${d.bkOff}</span></div><div class="rw-cell" style="width:35%"><span class="p-label">Takeoff:</span></div><div class="rw-cell" style="flex:1"><span class="p-value">${d.tkof}</span></div></div>
+                    <div class="rw-row" style="border-bottom:none;"><div class="rw-cell" style="width:25%"><span class="p-label">Brakes On:</span> <span class="p-value">${d.bkOn}</span></div><div class="rw-cell" style="width:35%"><span class="p-label">Landing:</span></div><div class="rw-cell" style="flex:1"><span class="p-value">${d.ldg}</span></div></div>
+                </div>
+            </div>
+            <table class="navlog-print-table">
+                <thead><tr><th class="col-fromto">FROM / TO</th><th class="col-msa">MSA</th><th class="col-alt">ALT</th><th class="col-tas">TAS</th><th class="col-tr">TR<br>(T)</th><th class="col-wv">W/V</th><th class="col-hdg">HDG<br>(T)</th><th class="col-hdg">HDG<br>(M)</th><th class="col-gs">G/S</th><th class="col-dist">Dist</th><th class="col-time">Time</th><th class="col-eta">ETA</th><th class="col-eta">ATA</th></tr></thead>
+                <tbody>${generatePrintRows(pageRows, 5)}</tbody>
+            </table>
+            <div class="footer-section">
+                <div class="footer-left">
+                    <div class="distress-bar">"Distress 121.50"</div>
+                    <table class="stations-table">
+                        <tr><th>STATION</th><th>CRS</th><th>FREQ</th></tr>
+                        <tr><td>${stations[0]?.st||''}</td><td>${stations[0]?.crs||''}</td><td>${stations[0]?.frq||''}</td></tr>
+                        <tr><td>${stations[1]?.st||''}</td><td>${stations[1]?.crs||''}</td><td>${stations[1]?.frq||''}</td></tr>
+                        <tr><td>${stations[2]?.st||''}</td><td>${stations[2]?.crs||''}</td><td>${stations[2]?.frq||''}</td></tr>
+                    </table>
+                    <div class="fuel-header">FUEL & M/B</div>
+                    <div class="fuel-row"><div class="fuel-lbl">FOB</div><div class="fuel-val">${d.fob}</div></div>
+                    <div class="fuel-row"><div class="fuel-lbl">Fuel Req</div><div class="fuel-val">${d.fuelReq}</div></div>
+                    <div class="mb-print-box"><span>CG: <b>${mb.cg}</b></span><span>GW: <b>${mb.wt}</b></span></div>
+                </div>
+                <div class="footer-mid">
+                    <div class="clearance-header">Clearance / Observations</div>
+                    <div class="clearance-box">${d.clearance}</div>
+                </div>
+                <div class="footer-right"><div class="vertical-text">DENTO AVIATION</div></div>
+            </div>
+        </div>
+    </div>`;
+}
+
+function generatePrintLayout() {
+    const container = document.getElementById("printPagesContainer"); 
+    if(!container) return;
+    container.innerHTML = "";
+    
+    const rows = Array.from(document.querySelectorAll("#navlog tbody tr"));
+    const legsPerPage = 5; 
+    const totalPages = Math.ceil(Math.max(rows.length, 1) / legsPerPage);
+    const totalDist = document.getElementById("totalDist") ? document.getElementById("totalDist").value : "";
+
+    for (let i = 0; i < totalPages; i += 2) {
+        const pageLeftHTML = getHtmlForPage(rows, i, totalDist);
+        let pageRightHTML = "";
+        if (i + 1 < totalPages) {
+            pageRightHTML = getHtmlForPage(rows, i + 1, totalDist);
+        } else if (totalPages === 1) {
+            pageRightHTML = pageLeftHTML; 
+        } else {
+            pageRightHTML = ""; 
+        }
+
+        const sheetHTML = `
+        <div class="print-sheet">
+            <div class="half-sheet">${pageLeftHTML}</div>
+            <div class="half-sheet">${pageRightHTML}</div>
+        </div>`;
+        
+        container.innerHTML += sheetHTML;
+    }
+}
+
+/* --- SAVE AS IMAGE FUNCTION --- */
+function saveAsImage() {
+    // 1. Generate the layout hidden (but attached to DOM)
+    generatePrintLayout();
+    document.body.classList.add("show-overlay");
+    
+    const sheets = document.querySelectorAll('.print-sheet');
+    if (sheets.length === 0) return;
+
+    // Use the first sheet (standard for kneeboard)
+    const target = sheets[0];
+
+    // 2. Use html2canvas
+    html2canvas(target, {
+        scale: 2, // High resolution (retina)
+        useCORS: true, // Allow external assets if any
+        logging: false
+    }).then(canvas => {
+        // 3. Create Download
+        const link = document.createElement('a');
+        link.download = 'Navlog_Kneeboard.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        
+        // 4. Cleanup
+        document.body.classList.remove("show-overlay");
+    }).catch(err => {
+        console.error("Image generation failed:", err);
+        alert("Could not generate image. Please try 'Print / PDF' instead.");
+        document.body.classList.remove("show-overlay");
+    });
+}
+
+function generatePrintRows(rows, targetCount) {
+    let html = "";
+    rows.forEach(row => { html += `<tr><td class="split-cell"><div class="split-top">${getCellValue(row, 0)}</div><div class="split-bottom">${getCellValue(row, 1)}</div></td><td>${getCellValue(row, 2)}</td><td>${getCellValue(row, 3)}</td><td>${getCellValue(row, 4)}</td><td>${getCellValue(row, 5)}</td><td>${getCellValue(row, 6)}</td><td>${getCellValue(row, 8)}</td><td>${getCellValue(row, 9)}</td><td>${getCellValue(row, 10)}</td><td>${getCellValue(row, 11)}</td><td>${getCellValue(row, 12)}</td><td>${getCellValue(row, 13)}</td><td>${getCellValue(row, 14)}</td></tr>`; });
+    for(let i = rows.length; i < targetCount; i++) { html += `<tr><td class="split-cell"><div class="split-top"></div><div class="split-bottom"></div></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`; }
+    return html;
 }
 
 function previewOverlay() { generatePrintLayout(); document.body.classList.add("show-overlay"); }
